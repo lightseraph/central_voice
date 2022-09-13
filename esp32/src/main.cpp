@@ -4,7 +4,7 @@
 #define ONBOARD_LED 2
 #define CONN_STATUS 4 //检测模块联网状态
 // 2<->0: 0; 2->0: 1
-#define TRANSFER_MODE 0
+#define TRANSFER_MODE 2
 
 SemaphoreHandle_t h_SerialMutex;
 const byte E18_query_cmd[] = {0x55, 0x03, 0x00, 0x00, 0x00}; //查询网络状态命令
@@ -101,7 +101,7 @@ void setup()
   Serial2.begin(115200);
   delay(1000);
   // Serial.onReceive(Serial_callbcak);
-  xTaskCreate(taskConnStatus_E18, "Task_Connection", 2048, NULL, 1, NULL);
+  // xTaskCreate(taskConnStatus_E18, "Task_Connection", 2048, NULL, 1, NULL);
 }
 
 void loop()
@@ -141,6 +141,5 @@ void loop()
     delay(200);
     Serial.write(s2_buff, s2_data_len);
   }
-
 #endif
 }
