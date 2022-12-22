@@ -1,17 +1,28 @@
 #include <Arduino.h>
+#include <WiFi.h>
+#include <EEPROM.h>
+
+#define NTP1 "cn.ntp.org.cn"
+#define NTP2 "pool.ntp.org"
+#define NTP3 "ntp3.aliyun.com"
+
+const char *ssid = "PDCN";                                                                                         // WIFI账户
+const char *password = "letmethink";                                                                               // WIFI密码
+const String WDAY_NAMES[] = {"星期天", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"};                // 星期
+const String MONTH_NAMES[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}; // 月份
 
 // put your main code here, to run repeatedly:
 #define ONBOARD_LED 2
-#define CONN_STATUS 4 //检测模块联网状态
+#define CONN_STATUS 4 // 检测模块联网状态
 // 2<->0: 0; 2->0: 1
 #define TRANSFER_MODE 2
 
 // SemaphoreHandle_t h_SerialMutex;
-const byte E18_query_cmd[] = {0x55, 0x03, 0x00, 0x00, 0x00}; //查询网络状态命令
+const byte E18_query_cmd[] = {0x55, 0x03, 0x00, 0x00, 0x00}; // 查询网络状态命令
 const byte E18_transfer_mode[] = {0x55, 0x07, 0x00, 0x11, 0x00, 0x03, 0x00, 0x01, 0x13};
 const byte E18_command_mode[] = {0x55, 0x07, 0x00, 0x11, 0x00, 0x03, 0x00, 0x00, 0x12};
-u_int ReadSerial(HardwareSerial serial_instance, byte *buff); //串口读取函数
-bool XOR8_Checksum(byte *buff, int buff_len);                 //检查数据校验是否正确
+u_int ReadSerial(HardwareSerial serial_instance, byte *buff); // 串口读取函数
+bool XOR8_Checksum(byte *buff, int buff_len);                 // 检查数据校验是否正确
 void Serial2_callback(void);
 void Serial_callback(void);
 
@@ -34,7 +45,7 @@ bool XOR8_Checksum(byte *buff, int buff_len) // XOR8校验算法
       sum = sum ^ buff[i];
     }
   }
-  if (sum == buff[buff_len - 1] && buff[0] == 0x55 && buff[1] == buff_len - 2) //判断校验位，帧头是不是0x55, 实际收到数据包长度是否与数据内指示长度相等
+  if (sum == buff[buff_len - 1] && buff[0] == 0x55 && buff[1] == buff_len - 2) // 判断校验位，帧头是不是0x55, 实际收到数据包长度是否与数据内指示长度相等
     return true;
   else
     return false;
@@ -91,59 +102,55 @@ void taskConnStatus_E18(void *parameter)
   vTaskDelete(NULL);
 }
 
+void getClock()
+{
+  struct tm timeInfo;
+  if (!getLocalTime(&timeInfo))
+  { // 一定要加这个条件判断，否则内存溢出
+    Serial.println("Failed to obtain time");
+    return;
+  }
+  Serial.println(&timeInfo, "%T");
+}
+
 void setup()
 {
   // put your setup code here, to run once:
   pinMode(ONBOARD_LED, OUTPUT);
-  pinMode(CONN_STATUS, INPUT);
+  // pinMode(CONN_STATUS, INPUT);
 
   // h_SerialMutex = xSemaphoreCreateMutex();
-
+  EEPROM.begin(8);
+  EEPROM.write(0, 0);
   Serial.begin(115200);
   Serial2.begin(115200);
-  delay(1000);
-  Serial.onReceive(Serial_callback);
-  Serial2.onReceive(Serial2_callback);
-  // Serial.onReceive(Serial_callbcak);
-  // xTaskCreate(taskConnStatus_E18, "Task_Connection", 2048, NULL, 1, NULL);
+  delay(500);
+  // Serial.onReceive(Serial_callback);
+  // Serial2.onReceive(Serial2_callback);
+
+  //  xTaskCreate(taskConnStatus_E18, "Task_Connection", 2048, NULL, 1, NULL);
+
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(ssid, password);
+  while (WiFi.status() != WL_CONNECTED)
+  {
+    delay(500);
+    Serial.print(".");
+  }
+  Serial.println("WiFi connected!");
+  configTime(8 * 3600, 0, NTP1, NTP2, NTP3);
+  getClock();
+  delay(5000);
+
+  WiFi.disconnect(true); // 断开wifi网络
+  WiFi.mode(WIFI_OFF);   // 关闭网络
 }
 
 void loop()
 {
   // put your main code here, to run repeatedly:
-
-  // Serial.write("run normal!\n");
-
-#if 0 == TRANSFER_MODE
-    s0_data_len = Serial.available(); //判断上位机是否发来数据
-    delay(100);
-    if (s0_data_len != 0)
-    {
-      Serial.readBytes(buff, s0_data_len); //读上位机数据
-      delay(200);
-      // Serial.write(buff,s0_data_len);
-      Serial2.write(buff, s0_data_len); //发送给zigbee模块
-      delay(200);
-      s2_data_len = Serial2.available(); //判断zigbee模块是否返回数据
-      delay(100);
-      if (s2_data_len != 0)
-      {
-        Serial2.readBytes(s2_buff, s2_data_len); //读zigbee模块返回数据
-        delay(200);
-        Serial.write(s2_buff, s2_data_len); //将数据返回给上位机
-      }
-    }
-
-#elif 1 == TRANSFER_MODE
-  s2_data_len = Serial2.available();
-  delay(100);
-  if (s2_data_len != 0)
-  {
-    Serial2.readBytes(s2_buff, s2_data_len);
-    delay(200);
-    Serial.write(s2_buff, s2_data_len);
-  }
-#endif
+  getClock();
+  delay(5000);
 }
 
 void Serial_callback(void)
@@ -153,7 +160,7 @@ void Serial_callback(void)
   s0_data_len = Serial.available();
   if (s0_data_len != 0)
   {
-    Serial.readBytes(buff, s0_data_len); //读上位机数据
+    Serial.readBytes(buff, s0_data_len); // 读上位机数据
     delay(200);
     Serial2.write(buff, s0_data_len);
   }
@@ -166,7 +173,7 @@ void Serial2_callback(void)
   s2_data_len = Serial2.available();
   if (s2_data_len != 0)
   {
-    Serial2.readBytes(buff, s2_data_len); //读Zigbee数据
+    Serial2.readBytes(buff, s2_data_len); // 读Zigbee数据
     delay(200);
     Serial.write(buff, s2_data_len);
     // Serial.println();
