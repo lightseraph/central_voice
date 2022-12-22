@@ -6,12 +6,14 @@
 // 2<->0: 0; 2->0: 1
 #define TRANSFER_MODE 2
 
-SemaphoreHandle_t h_SerialMutex;
+// SemaphoreHandle_t h_SerialMutex;
 const byte E18_query_cmd[] = {0x55, 0x03, 0x00, 0x00, 0x00}; //查询网络状态命令
 const byte E18_transfer_mode[] = {0x55, 0x07, 0x00, 0x11, 0x00, 0x03, 0x00, 0x01, 0x13};
 const byte E18_command_mode[] = {0x55, 0x07, 0x00, 0x11, 0x00, 0x03, 0x00, 0x00, 0x12};
 u_int ReadSerial(HardwareSerial serial_instance, byte *buff); //串口读取函数
 bool XOR8_Checksum(byte *buff, int buff_len);                 //检查数据校验是否正确
+void Serial2_callback(void);
+void Serial_callback(void);
 
 template <class T>
 int getArrayLen(T &array)
@@ -95,11 +97,13 @@ void setup()
   pinMode(ONBOARD_LED, OUTPUT);
   pinMode(CONN_STATUS, INPUT);
 
-  h_SerialMutex = xSemaphoreCreateMutex();
+  // h_SerialMutex = xSemaphoreCreateMutex();
 
   Serial.begin(115200);
   Serial2.begin(115200);
   delay(1000);
+  Serial.onReceive(Serial_callback);
+  Serial2.onReceive(Serial2_callback);
   // Serial.onReceive(Serial_callbcak);
   // xTaskCreate(taskConnStatus_E18, "Task_Connection", 2048, NULL, 1, NULL);
 }
@@ -107,10 +111,8 @@ void setup()
 void loop()
 {
   // put your main code here, to run repeatedly:
-  byte buff[32];
-  byte s2_buff[32];
-  int s0_data_len = 0;
-  int s2_data_len = 0;
+
+  // Serial.write("run normal!\n");
 
 #if 0 == TRANSFER_MODE
     s0_data_len = Serial.available(); //判断上位机是否发来数据
@@ -142,4 +144,31 @@ void loop()
     Serial.write(s2_buff, s2_data_len);
   }
 #endif
+}
+
+void Serial_callback(void)
+{
+  byte buff[64];
+  int s0_data_len = 0;
+  s0_data_len = Serial.available();
+  if (s0_data_len != 0)
+  {
+    Serial.readBytes(buff, s0_data_len); //读上位机数据
+    delay(200);
+    Serial2.write(buff, s0_data_len);
+  }
+}
+
+void Serial2_callback(void)
+{
+  byte buff[64];
+  int s2_data_len = 0;
+  s2_data_len = Serial2.available();
+  if (s2_data_len != 0)
+  {
+    Serial2.readBytes(buff, s2_data_len); //读Zigbee数据
+    delay(200);
+    Serial.write(buff, s2_data_len);
+    // Serial.println();
+  }
 }
