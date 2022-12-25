@@ -2,12 +2,13 @@
 
 struct Record
 {
-    uint8_t addr[2];
+    // uint8_t addr[2];
     int sendCount;
     int normalTransCount;
     int slowTransCount;
     int overtimeTransCount;
-    int totalTime_inSec;
+    tm totalTime_inSec;
+    tm prevSentTime;
 };
 
 void initEEPROM();

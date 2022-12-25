@@ -2,6 +2,7 @@
     "files.associations": {
         "*.ino": "cpp",
         "iostream": "cpp",
-        "list": "cpp"
+        "list": "cpp",
+        "map": "cpp"
     }
 }
