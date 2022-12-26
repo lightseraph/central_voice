@@ -40,7 +40,8 @@ typedef enum
 {
   BROADCAST,
   TEST,
-  STOPPED
+  STOPPED,
+  CHECKNETWORK
 } WorkStatus;
 
 DeviceType type;
@@ -222,17 +223,17 @@ void loop()
 
     case TEST: // 协调器进入测试模式，发送当前时间，前面加上终端地址
       struct tm timeInfo;
-      char str[32] = {0};
-      char strTime[32] = {0};
+      char str[26] = {0};
+      char strTime[24] = {0};
 
       for (addrIt = resultReport.begin(); addrIt != resultReport.end(); addrIt++)
       {
         if (getLocalTime(&timeInfo))
         {
-          strftime(strTime, 32, "%Y-%m-%d %H:%M:%S", &timeInfo);
+          strftime(strTime, 24, "%Y-%m-%d %H:%M:%S", &timeInfo);
           str[0] = (addrIt->first >> 8) & 0xff;
           str[1] = addrIt->first & 0xff;
-          for (int i = 2; i < 30; i++)
+          for (int i = 2; i < 26; i++)
             str[i] = strTime[i - 2];
 
           addrIt->second.prevSentTime = timeInfo;
@@ -262,7 +263,7 @@ void Serial_callback(void)
 
     if (strcmp(strBuff, "qt") == 0) // 查询连接的终端列表
     {
-      Serial.printf("total registered device: %d\r\n", resultReport.size());
+      Serial.printf("\r\nTotal registered device: %d\r\n", resultReport.size());
       for (i = 1, addrIt = resultReport.begin(); addrIt != resultReport.end(); addrIt++, i++)
       {
         Serial.printf("Terminal %d address: %x\r\n", i, addrIt->first);
@@ -293,8 +294,9 @@ void Serial_callback(void)
     {
       for (addrIt = resultReport.begin(); addrIt != resultReport.end(); addrIt++)
       {
-        Serial.printf("Terminal %x, total sent %d package\r\n", addrIt->first, addrIt->second.sendCount);
+        Serial.printf("\r\nTerminal %x, total sent %d package\r\n", addrIt->first, addrIt->second.sendCount);
         Serial.printf("Normal transfer: %d\r\n", addrIt->second.normalTransCount);
+        Serial.printf("Slow transfer: %d\r\n\r\n", addrIt->second.slowTransCount);
       }
       return;
     }
@@ -364,19 +366,16 @@ void Serial2_callback(void)
       if (buff[0] == 0xEE && workStatus == BROADCAST) // 串口输出一次终端注册信息
       {
         uint16_t add = (uint16_t)buff[1] << 8 | buff[2];
-        /*  for (addrIt = deviceAddr.begin(); addrIt != deviceAddr.end(); addrIt++)
-         {
-           if (add == *addrIt)
-             return;
-         } */
+
         auto it = resultReport.find(add);
         if (it == resultReport.end())
         {
           resultReport.insert(std::pair<uint16_t, Record>(add, report));
           Serial.printf("Terminal %x register in.\r\n", add);
         }
+        else
+          Serial.printf("Terminal %x rejoin in.\r\n", add);
 
-        // deviceAddr.push_back(add);
         return;
       }
       // 协调器收到0xE0，记录一次返回结果。
@@ -384,15 +383,15 @@ void Serial2_callback(void)
       {
         tm localTimeInfo;
         uint16_t addr = (uint16_t)buff[2] << 8 | buff[3];
-        Serial.printf("Terminal %x replied, delay time is %d\r\n", addr, buff[1]);
+        Serial.printf("\r\nTerminal %x replied, recieve delay time is %d\r\n", addr, buff[1]);
         if (getLocalTime(&localTimeInfo))
         {
           int difTime = (int)difftime(mktime(&localTimeInfo), mktime(&(resultReport.find(addr)->second.prevSentTime)));
-          Serial.printf("Echo time is:%d\r\n", difTime);
+          Serial.printf("Echo delay time is:%d\r\n", difTime);
           if (difTime < 5)
             resultReport.find(addr)->second.normalTransCount++;
           if (difTime >= 5 && difTime < 10)
-            resultReport.find(addr)->second.overtimeTransCount++;
+            resultReport.find(addr)->second.slowTransCount++;
         }
         return;
       }
