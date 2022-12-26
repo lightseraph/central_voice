@@ -9,7 +9,7 @@
 #define NTP1 "cn.ntp.org.cn"
 #define NTP2 "ntp3.aliyun.com"
 
-const char *ssid = "LighthouseAP";                                                                                 // WIFI账户
+const char *ssid = "PDCN";                                                                                         // WIFI账户
 const char *password = "letmethink";                                                                               // WIFI密码
 const String WDAY_NAMES[] = {"星期天", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"};                // 星期
 const String MONTH_NAMES[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}; // 月份
@@ -236,6 +236,7 @@ void loop()
             str[i] = strTime[i - 2];
 
           addrIt->second.prevSentTime = timeInfo;
+          addrIt->second.sendCount++;
           Serial2.write(str);
           delay(10000);
         }
@@ -264,13 +265,20 @@ void Serial_callback(void)
       Serial.printf("total registered device: %d\r\n", resultReport.size());
       for (i = 1, addrIt = resultReport.begin(); addrIt != resultReport.end(); addrIt++, i++)
       {
-        Serial.printf("Terminator %d address: %x\r\n", i, addrIt->first);
+        Serial.printf("Terminal %d address: %x\r\n", i, addrIt->first);
       }
       return;
     }
 
     if (strcmp(strBuff, "start") == 0) // 开始通信测试
     {
+      for (addrIt = resultReport.begin(); addrIt != resultReport.end(); addrIt++)
+      {
+        addrIt->second.normalTransCount = 0;
+        addrIt->second.overtimeTransCount = 0;
+        addrIt->second.sendCount = 0;
+        addrIt->second.slowTransCount = 0;
+      }
       Serial2.write(enterConfigCmd, 3);
       delay(1000);
       Serial2.write(p2pCmd, 5);
@@ -283,6 +291,11 @@ void Serial_callback(void)
 
     if (strcmp(strBuff, "qr") == 0) // 查询通信测试结果
     {
+      for (addrIt = resultReport.begin(); addrIt != resultReport.end(); addrIt++)
+      {
+        Serial.printf("Terminal %x, total sent %d package\r\n", addrIt->first, addrIt->second.sendCount);
+        Serial.printf("Normal transfer: %d\r\n", addrIt->second.normalTransCount);
+      }
       return;
     }
 
@@ -360,7 +373,7 @@ void Serial2_callback(void)
         if (it == resultReport.end())
         {
           resultReport.insert(std::pair<uint16_t, Record>(add, report));
-          Serial.printf("Terminator %x register in.\r\n", add);
+          Serial.printf("Terminal %x register in.\r\n", add);
         }
 
         // deviceAddr.push_back(add);
@@ -371,7 +384,7 @@ void Serial2_callback(void)
       {
         tm localTimeInfo;
         uint16_t addr = (uint16_t)buff[2] << 8 | buff[3];
-        Serial.printf("Terminator %x replied, delay time is %d\r\n", addr, buff[1]);
+        Serial.printf("Terminal %x replied, delay time is %d\r\n", addr, buff[1]);
         if (getLocalTime(&localTimeInfo))
         {
           int difTime = (int)difftime(mktime(&localTimeInfo), mktime(&(resultReport.find(addr)->second.prevSentTime)));
