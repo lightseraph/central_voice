@@ -2,7 +2,6 @@
 #include <WiFi.h>
 #include <time.h>
 #include <iostream>
-#include <list>
 #include <map>
 #include "recorder.h"
 // using namespace std;
@@ -23,7 +22,6 @@ const uint8_t p2pCmd[] = {0xFD, 0x01, 0x26, 0x04, 0xFF};           // 协议点�
 const uint8_t registerReply[] = {0x00, 0x00, 0xEE};                // 终端注册指令
 const uint8_t restartCmd[] = {0xFD, 0x00, 0x12, 0xFF};             // 模块重启指令
 
-std::list<uint16_t> deviceAddr;
 std::map<uint16_t, Record>::iterator addrIt;
 std::map<uint16_t, Record> resultReport;
 
@@ -56,8 +54,7 @@ WorkStatus workStatus;
 // const byte E18_query_cmd[] = {0x55, 0x03, 0x00, 0x00, 0x00}; // 查询网络状态命令
 // const byte E18_transfer_mode[] = {0x55, 0x07, 0x00, 0x11, 0x00, 0x03, 0x00, 0x01, 0x13};
 // const byte E18_command_mode[] = {0x55, 0x07, 0x00, 0x11, 0x00, 0x03, 0x00, 0x00, 0x12};
-u_int ReadSerial(HardwareSerial serial_instance, byte *buff); // 串口读取函数
-bool XOR8_Checksum(byte *buff, int buff_len);                 // 检查数据校验是否正确
+bool XOR8_Checksum(byte *buff, int buff_len); // 检查数据校验是否正确
 void Serial2_callback(void);
 void Serial_callback(void);
 
@@ -86,19 +83,7 @@ bool XOR8_Checksum(byte *buff, int buff_len) // XOR8校验算法
     return false;
 }
 
-u_int ReadSerial(HardwareSerial serial_instance, byte *buff)
-{
-  u_int data_len = serial_instance.available();
-  vTaskDelay(pdMS_TO_TICKS(100));
-  if (data_len)
-  {
-    serial_instance.readBytes(buff, data_len);
-    return data_len;
-  }
-  return 0;
-}
-
-void taskConnStatus_E180(void *parameter) // E180
+/* void taskConnStatus_E180(void *parameter) // E180
 {
   int connection_status;
   while (true)
@@ -135,7 +120,7 @@ void taskConnStatus_E18(void *parameter)
   }
   Serial.println("Ending task_connection");
   vTaskDelete(NULL);
-}
+} */
 
 void initClock()
 {
