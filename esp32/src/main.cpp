@@ -8,10 +8,8 @@
 #define NTP1 "cn.ntp.org.cn"
 #define NTP2 "ntp3.aliyun.com"
 
-const char *ssid = "PDCN";                                                                                         // WIFI账户
-const char *password = "letmethink";                                                                               // WIFI密码
-const String WDAY_NAMES[] = {"星期天", "星期一", "星期二", "星期三", "星期四", "星期五", "星期六"};                // 星期
-const String MONTH_NAMES[] = {"Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"}; // 月份
+const char *ssid = "PDCN";           // WIFI账户
+const char *password = "letmethink"; // WIFI密码
 
 // 指令集
 const uint8_t queryTypeCmd[4] = {0xfe, 0x01, 0x01, 0xff};          // 查询设备类型
@@ -42,6 +40,8 @@ typedef enum
   CHECKNETWORK
 } WorkStatus;
 
+hw_timer_t *tim1 = NULL;
+uint16_t timer = 0;
 DeviceType type;
 WorkStatus workStatus;
 // put your main code here, to run repeatedly:
@@ -81,6 +81,11 @@ bool XOR8_Checksum(byte *buff, int buff_len) // XOR8校验算法
     return true;
   else
     return false;
+}
+
+void IRAM_ATTR onTimer()
+{
+  timer++;
 }
 
 /* void taskConnStatus_E180(void *parameter) // E180
@@ -173,6 +178,10 @@ void setup()
   Serial.onReceive(Serial_callback);
   Serial2.onReceive(Serial2_callback);
 
+  tim1 = timerBegin(0, 80, true);
+  timerAttachInterrupt(tim1, onTimer, true);
+  timerAlarmWrite(tim1, 1000ul, true); // 每毫秒产生一个中断计数
+
   Serial2.write(enterConfigCmd, 3);
   delay(1000);
   Serial2.write(queryTypeCmd, 4);
@@ -223,6 +232,7 @@ void loop()
 
           addrIt->second.prevSentTime = timeInfo;
           addrIt->second.sendCount++;
+          timer = 0;
           Serial2.write(str);
           delay(10000);
         }
@@ -264,6 +274,7 @@ void Serial_callback(void)
         addrIt->second.overtimeTransCount = 0;
         addrIt->second.sendCount = 0;
         addrIt->second.slowTransCount = 0;
+        addrIt->second.over1000Count = 0;
       }
       Serial2.write(enterConfigCmd, 3);
       delay(1000);
@@ -272,22 +283,28 @@ void Serial_callback(void)
       Serial2.write(enterTransferCmd, 3);
       delay(1000);
       workStatus = TEST;
+      timerAlarmEnable(tim1);
       return;
     }
 
     if (strcmp(strBuff, "qr") == 0) // 查询通信测试结果
     {
+      Serial.println("*****************Transfer test report**********************");
       for (addrIt = resultReport.begin(); addrIt != resultReport.end(); addrIt++)
       {
         Serial.printf("\r\nTerminal %x, total sent %d package\r\n", addrIt->first, addrIt->second.sendCount);
         Serial.printf("Normal transfer: %d\r\n", addrIt->second.normalTransCount);
-        Serial.printf("Slow transfer: %d\r\n\r\n", addrIt->second.slowTransCount);
+        Serial.printf("Slow transfer: %d\r\n", addrIt->second.slowTransCount);
+        Serial.printf("Over 1s transfer: %d\r\n", addrIt->second.over1000Count);
+        Serial.printf("Overtime transfer: %d\r\n", addrIt->second.overtimeTransCount);
       }
+      Serial.println("***********************************************************");
       return;
     }
 
     if (strcmp(strBuff, "stop") == 0) // 停止通信测试
     {
+      timerAlarmDisable(tim1);
       workStatus = STOPPED;
       return;
     }
@@ -315,7 +332,7 @@ void Serial2_callback(void)
       // 非协调器收到等待注册广播
       if (!registered && buff[0] == 0x72 && buff[1] == 0x66 && buff[2] == 0x74)
       {
-        Serial.println("reply");
+        // Serial.println("reply");
         delay(rand() % 6);               // 随机延迟0～5秒发送，防止多个终端同时发送产生拥堵
         Serial2.write(registerReply, 3); // 回复注册指令
         registered = true;
@@ -335,7 +352,7 @@ void Serial2_callback(void)
           difTime = (int)difftime(mktime(&localTimeInfo), mktime(&recvTimeInfo));
         // Serial.println(&recvTimeInfo, "%Y-%m-%d %H:%M:%S");
         uint8_t replyBuff[4];
-        replyBuff[0] = 0x00;
+        replyBuff[0] = 0x00; // 协调器地址0x0000
         replyBuff[1] = 0x00;
         replyBuff[2] = 0xE0;
         replyBuff[3] = (uint8_t)difTime;
@@ -368,16 +385,24 @@ void Serial2_callback(void)
       {
         tm localTimeInfo;
         uint16_t addr = (uint16_t)buff[2] << 8 | buff[3];
-        Serial.printf("\r\nTerminal %x replied, recieve delay time is %d\r\n", addr, buff[1]);
-        if (getLocalTime(&localTimeInfo))
+        if (addr != addrIt->first) // 收到的回复信息不是当前发送的终端回复的，当成是上一次超时回复的。
         {
-          int difTime = (int)difftime(mktime(&localTimeInfo), mktime(&(resultReport.find(addr)->second.prevSentTime)));
-          Serial.printf("Echo delay time is:%d\r\n", difTime);
-          if (difTime < 5)
-            resultReport.find(addr)->second.normalTransCount++;
-          if (difTime >= 5 && difTime < 10)
-            resultReport.find(addr)->second.slowTransCount++;
+          Serial.printf("\r\nTerminal %x replied package is overtime! \r\n", addr);
+          addrIt->second.overtimeTransCount++;
+          return;
         }
+
+        Serial.printf("\r\nTerminal %x replied, recieve delay time is %d\r\n", addr, buff[1]);
+
+        Serial.printf("Echo delay time is:%d ms\r\n", timer);
+        if (timer < 600)
+          resultReport.find(addr)->second.normalTransCount++;
+        if (timer >= 600 && timer < 1000)
+          resultReport.find(addr)->second.slowTransCount++;
+        if (timer >= 1000)
+          resultReport.find(addr)->second.over1000Count++;
+
+        timer = 0;
         return;
       }
     }

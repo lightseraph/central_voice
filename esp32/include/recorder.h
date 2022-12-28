@@ -9,6 +9,7 @@ struct Record
     int overtimeTransCount;
     tm totalTime_inSec;
     tm prevSentTime;
+    int over1000Count;
 };
 
 void initEEPROM();
