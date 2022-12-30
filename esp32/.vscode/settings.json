@@ -3,6 +3,7 @@
         "*.ino": "cpp",
         "iostream": "cpp",
         "list": "cpp",
-        "map": "cpp"
+        "map": "cpp",
+        "sstream": "cpp"
     }
 }

@@ -3,13 +3,13 @@
 struct Record
 {
     // uint8_t addr[2];
-    int sendCount;
-    int normalTransCount;
-    int slowTransCount;
-    int overtimeTransCount;
+    uint16_t sendCount;
+    uint16_t normalTransCount;
+    uint16_t slowTransCount;
+    uint16_t overtimeTransCount;
     tm totalTime_inSec;
     tm prevSentTime;
-    int over1000Count;
+    uint16_t over1000Count;
 };
 
 void initEEPROM();
