@@ -4,6 +4,7 @@
 #include <iostream>
 #include <map>
 #include "recorder.h"
+#include "zmodule.h"
 // using namespace std;
 #define NTP1 "cn.ntp.org.cn"
 #define NTP2 "ntp3.aliyun.com"
@@ -22,24 +23,10 @@ const uint8_t restartCmd[] = {0xFD, 0x00, 0x12, 0xFF};             // 模块重�
 const uint8_t queryParent[] = {0xFE, 0x02, 0x07, 0xFF};            // 查询父节点短地址
 
 std::map<uint16_t, Record>::iterator addrIt;
-std::map<uint16_t, Record> resultReport;
+std::map<uint16_t, Record> resultReport; // 终端短地址是键，测试结果是值
 
 bool checkNTP = true;
 bool registered = false;
-typedef enum
-{
-  COORDINATOR = 1,
-  ROUTER,
-  TERMINATOR
-} DeviceType;
-
-typedef enum
-{
-  BROADCAST,
-  TEST,
-  STOPPED,
-  CHECKNETWORK
-} WorkStatus;
 
 hw_timer_t *tim1 = NULL;
 uint16_t timer = 0;
@@ -84,7 +71,7 @@ bool XOR8_Checksum(byte *buff, int buff_len) // XOR8校验算法
     return false;
 }
 
-void IRAM_ATTR onTimer()
+void IRAM_ATTR onTimer() // 定时器中断函数，每毫秒触发
 {
   timer++;
 }
@@ -181,7 +168,7 @@ void setup()
 
   tim1 = timerBegin(0, 80, true);
   timerAttachInterrupt(tim1, onTimer, true);
-  timerAlarmWrite(tim1, 1000ul, true); // 每毫秒产生一个中断计数
+  timerAlarmWrite(tim1, 1000, true); // 每毫秒产生一个中断计数
 
   Serial2.write(enterConfigCmd, 3);
   delay(1000);
@@ -217,7 +204,7 @@ void loop()
       break;
 
     case TEST: // 协调器进入测试模式，发送当前时间，前面加上终端地址
-      struct tm timeInfo;
+      tm timeInfo;
       char txd_buff[24] = {0};
       char strTime[21] = {0};
 
