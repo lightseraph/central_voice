@@ -227,7 +227,7 @@ void loop()
           // Serial.write(txd_buff, 24);
           Serial2.write(txd_buff, 24);
           timer = 0;
-          delay(8000);
+          delay(6000);
         }
       }
       break;
@@ -286,13 +286,12 @@ void Serial_callback(void)
       Serial.println("\r\n*****************Transfer test report**********************");
       for (addrIt = resultReport.begin(); addrIt != resultReport.end(); addrIt++, i++)
       {
-        if (i % 2)
-          Serial.println();
         Serial.printf("Terminal %04x, total sent %d package\r\n", addrIt->first, addrIt->second.sendCount);
         Serial.printf("Normal transfer: %d\r\n", addrIt->second.normalTransCount);
         Serial.printf("Slow transfer: %d\r\n", addrIt->second.slowTransCount);
         Serial.printf("Over 1s transfer: %d\r\n", addrIt->second.over1000Count);
         Serial.printf("Overtime transfer: %d\r\n", addrIt->second.overtimeTransCount);
+        Serial.println("");
       }
       Serial.println("***********************************************************\r\n");
       return;
@@ -450,9 +449,9 @@ void Serial2_callback(void)
         Serial.printf("\r\nTerminal %04x replied, recieve delay time is %d\r\n", addr, buff[1]);
 
         Serial.printf("Echo delay time is:%d ms\r\n", timer);
-        if (timer < 600)
+        if (timer < 500)
           resultReport.find(addr)->second.normalTransCount++;
-        if (timer >= 600 && timer < 1000)
+        if (timer >= 500 && timer < 1000)
           resultReport.find(addr)->second.slowTransCount++;
         if (timer >= 1000)
           resultReport.find(addr)->second.over1000Count++;
