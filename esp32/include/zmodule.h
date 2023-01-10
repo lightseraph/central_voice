@@ -76,6 +76,7 @@ private:
 
 public:
     void initModule(void);
+
     DeviceType getModuleType(void);
     void setModuleType(DeviceType type);
     ModuleMode getModuleMode(void);

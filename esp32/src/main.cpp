@@ -21,6 +21,7 @@ const uint8_t p2pCmd[] = {0xFD, 0x01, 0x26, 0x04, 0xFF};           // 协议点�
 const uint8_t registerReply[] = {0x00, 0x00, 0xEE};                // 终端注册指令
 const uint8_t restartCmd[] = {0xFD, 0x00, 0x12, 0xFF};             // 模块重启指令
 const uint8_t queryParent[] = {0xFE, 0x02, 0x07, 0xFF};            // 查询父节点短地址
+const uint8_t dataOutputMode[] = {0xFD, 0x01, 0x27, 0x04, 0xFF};   // 数据输出模式设置为数据+短地址+RSSI
 
 std::map<uint16_t, Record>::iterator addrIt;
 std::map<uint16_t, Record> resultReport; // 终端短地址是键，测试结果是值
@@ -174,6 +175,8 @@ void setup()
   delay(1000);
   Serial2.write(queryTypeCmd, 4);
   delay(1000);
+  Serial2.write(dataOutputMode, 5);
+  delay(1000);
   // Serial.print(type);
   if (type != COORDINATOR) // 如果不是协调器就进入传输模式
   {
@@ -188,7 +191,11 @@ void setup()
   }
   delay(1000);
   Serial2.write(enterTransferCmd, 3);
-  delay(2000); // 此延时是防止进入loop后立即发送指令
+  delay(2000);                // 此延时是防止进入loop后立即发送指令
+  while (Serial2.available()) // 清空返回数据
+  {
+    ;
+  }
 }
 
 void loop()
@@ -203,7 +210,7 @@ void loop()
       delay(5000);
       break;
 
-    case TEST: // 协调器进入测试模式，发送当前时间，前面加上终端地址
+    case TEST: // 协调器进入测试模式，发送当前时间 + 发送数据包计数，前面加上终端地址
       tm timeInfo;
       char txd_buff[24] = {0};
       char strTime[21] = {0};
@@ -227,7 +234,7 @@ void loop()
           // Serial.write(txd_buff, 24);
           Serial2.write(txd_buff, 24);
           timer = 0;
-          delay(6000);
+          delay(6000); // 向终端发送数据包的间隔
         }
       }
       break;
@@ -324,6 +331,7 @@ void Serial_callback(void)
       delay(1000);
       Serial2.write(enterTransferCmd, 3);
       delay(1000);
+      resultReport.clear();
       workStatus = BROADCAST;
     }
   }
@@ -337,7 +345,7 @@ void Serial2_callback(void)
   if (s2_data_len != 0)
   {
     Serial2.readBytes(buff, s2_data_len); // 读Zigbee数据
-    delay(100);
+    delay(50);
     // Serial.write(buff, s2_data_len);
     if (buff[0] == 0xFB && buff[1] == 0x01)
     {
@@ -370,14 +378,16 @@ void Serial2_callback(void)
         if (getLocalTime(&localTimeInfo))
           difTime = (int)difftime(mktime(&localTimeInfo), mktime(&recvTimeInfo));
         // Serial.println(&recvTimeInfo, "%Y-%m-%d %H:%M:%S");
-        uint8_t replyBuff[6];
+        uint8_t replyBuff[8];
         replyBuff[0] = 0x00; // 协调器地址0x0000
         replyBuff[1] = 0x00;
         replyBuff[2] = 0xE0;
         replyBuff[3] = (uint8_t)difTime;
-        replyBuff[4] = buff[20];
+        replyBuff[4] = buff[20]; // count
         replyBuff[5] = buff[21];
-        Serial2.write(replyBuff, 6);
+        replyBuff[6] = buff[24]; // RSSI
+        replyBuff[7] = buff[25];
+        Serial2.write(replyBuff, 8);
         return;
       }
       // 收到协调器发送的查询终端父节点指令
@@ -436,7 +446,7 @@ void Serial2_callback(void)
       {
         tm localTimeInfo;
         uint16_t count = (uint16_t)buff[2] << 8 | buff[3];
-        uint16_t addr = (uint16_t)buff[4] << 8 | buff[5];
+        uint16_t addr = (uint16_t)buff[6] << 8 | buff[7];
         // 收到的回复信息不是当前发送的终端回复的，当成是上一次超时回复的。
         // 或者收到的数据包计数不是等待的，也是超时或者重发
         if (addr != addrIt->first || count != addrIt->second.sendCount)
@@ -449,6 +459,7 @@ void Serial2_callback(void)
         Serial.printf("\r\nTerminal %04x replied, recieve delay time is %d\r\n", addr, buff[1]);
 
         Serial.printf("Echo delay time is:%d ms\r\n", timer);
+        Serial.printf("Remote RSSI: %02d,     Local RSSI: %02d\r\n", (int8_t)buff[5], (int8_t)buff[9]);
         if (timer < 500)
           resultReport.find(addr)->second.normalTransCount++;
         if (timer >= 500 && timer < 1000)
@@ -465,7 +476,7 @@ void Serial2_callback(void)
         uint16_t addr, parentAddr;
         parentAddr = (uint16_t)buff[1] << 8 | buff[2];
         addr = (uint16_t)buff[3] << 8 | buff[4];
-        Serial.printf("\r\nTerminal %04x parent is %04x\r\n", addr, parentAddr);
+        Serial.printf("\r\nTerminal %04x parent is %04x   RSSI:%02d\r\n", addr, parentAddr, (int8_t)buff[6]);
       }
     }
   }
