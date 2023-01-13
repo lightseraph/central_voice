@@ -4,8 +4,8 @@
 #include <iostream>
 #include <map>
 #include "recorder.h"
-#include "zmodule.h"
-// using namespace std;
+// #include "zmodule.h"
+//  using namespace std;
 #define NTP1 "cn.ntp.org.cn"
 #define NTP2 "ntp3.aliyun.com"
 
@@ -18,10 +18,10 @@ const uint8_t enterConfigCmd[] = {0x2A, 0x2D, 0x2E};               // 进入配�
 const uint8_t enterTransferCmd[] = {0x2F, 0x2C, 0x2B};             // 进入传输模式
 const uint8_t broadcastModeCmd[] = {0xFD, 0x01, 0x26, 0x00, 0xFF}; // 广播模式
 const uint8_t p2pCmd[] = {0xFD, 0x01, 0x26, 0x04, 0xFF};           // 协议点播模式
-const uint8_t registerReply[] = {0x00, 0x00, 0xEE};                // 终端注册指令
 const uint8_t restartCmd[] = {0xFD, 0x00, 0x12, 0xFF};             // 模块重启指令
 const uint8_t queryParent[] = {0xFE, 0x02, 0x07, 0xFF};            // 查询父节点短地址
 const uint8_t dataOutputMode[] = {0xFD, 0x01, 0x27, 0x04, 0xFF};   // 数据输出模式设置为数据+短地址+RSSI
+uint8_t registerReply[4] = {0x00, 0x00, 0xEE, 0x00};               // 终端注册指令
 
 std::map<uint16_t, Record>::iterator addrIt;
 std::map<uint16_t, Record> resultReport; // 终端短地址是键，测试结果是值
@@ -173,11 +173,18 @@ void setup()
 
   Serial2.write(enterConfigCmd, 3);
   delay(1000);
+  while (Serial2.available()) // 清空返回数据
+  {
+    ;
+  }
   Serial2.write(queryTypeCmd, 4);
   delay(1000);
-  Serial2.write(dataOutputMode, 5);
-  delay(1000);
-  // Serial.print(type);
+  // Serial2.write(dataOutputMode, 5);
+  // delay(1000);
+  // Serial.println(type);
+
+  // Serial.write(registerReply, 4);
+
   if (type != COORDINATOR) // 如果不是协调器就进入传输模式
   {
     Serial2.write(p2pCmd, 5);
@@ -261,7 +268,7 @@ void Serial_callback(void)
       Serial.printf("\r\nTotal registered device: %d\r\n", resultReport.size());
       for (i = 1, addrIt = resultReport.begin(); addrIt != resultReport.end(); addrIt++, i++)
       {
-        Serial.printf("Terminal %d address: %x\r\n", i, addrIt->first);
+        Serial.printf("Terminal %d address: %04x    Type is: 0x%02x\r\n", i, addrIt->first, (uint8_t)addrIt->second.type);
       }
       return;
     }
@@ -347,21 +354,22 @@ void Serial2_callback(void)
     Serial2.readBytes(buff, s2_data_len); // 读Zigbee数据
     delay(50);
     // Serial.write(buff, s2_data_len);
+    // 查询设备类型
     if (buff[0] == 0xFB && buff[1] == 0x01)
     {
       type = (DeviceType)buff[2];
+      registerReply[3] = type;
       // Serial.println(type);
     }
-    // 非协调器设备收到"rft"，准备指令, 如果已经发送过就不回复
+    // 非协调器设备收到"rft"，准备指令, 回复注册信息
     if (type != COORDINATOR)
     {
       // 非协调器收到等待注册广播
-      if (buff[0] == 0x72 && buff[1] == 0x66 && buff[2] == 0x74)
+      if (buff[0] == 0x72 && buff[1] == 0x66 && buff[2] == 0x74 && registerReply[3] != 0)
       {
         srand(millis());
-        // Serial.println("reply");
         delay(((rand() + 20) % 20) * 200); // 随机延迟1～4秒发送，防止多个终端同时发送产生拥堵
-        Serial2.write(registerReply, 3);   // 回复注册指令
+        Serial2.write(registerReply, 4);   // 回复注册指令
         // registered = true;
         //  workStatus = TEST;
         return;
@@ -426,15 +434,18 @@ void Serial2_callback(void)
     if (type == COORDINATOR)
     {
       Record report;
+
       if (buff[0] == 0xEE && workStatus == BROADCAST) // 串口输出一次终端注册信息
       {
-        uint16_t add = (uint16_t)buff[1] << 8 | buff[2];
+        uint16_t add = (uint16_t)buff[2] << 8 | buff[3];
 
         auto it = resultReport.find(add);
         if (it == resultReport.end())
         {
+          report.type = (DeviceType)buff[1];
           resultReport.insert(std::pair<uint16_t, Record>(add, report));
-          Serial.printf("Terminal %04x register in.\r\n", add);
+          Serial.printf("Terminal %04x register in.   Type is: 0x%02x\r\n", add, buff[1]);
+          Serial.printf("RSSI: %d\r\n", buff[5]);
         }
         // else
         //   Serial.printf("Terminal %04x rejoin in.\r\n", add);

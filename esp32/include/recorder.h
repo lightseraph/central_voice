@@ -1,5 +1,5 @@
 #include <EEPROM.h>
-
+#include "zmodule.h"
 struct Record
 {
     // uint8_t addr[2];
@@ -10,6 +10,7 @@ struct Record
     tm totalTime_inSec;
     tm prevSentTime;
     uint16_t over1000Count;
+    DeviceType type;
 };
 
 void initEEPROM();
